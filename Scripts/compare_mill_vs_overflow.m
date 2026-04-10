@@ -1,72 +1,75 @@
-%% =========================================
-% Comparison: Mill Product vs Overflow
-% =========================================
-
+%% =========================================================
+% Comparison: Fresh Feed vs Mill Product vs Overflow
+% =========================================================
 clear; clc; close all;
 
-%% Size classes
+%% 1. Size classes
 size_classes = [75 150 300 600 1200 2400];
 
-%% Replace these with your real vectors
-% Mill product = sortie broyeur avant hydrocyclone
+%% 2. Data Vectors (Example values - replace with your simulation results)
+% Fresh Feed (Entrée du circuit)
+fresh_feed   = [2 5 10 25 35 23]; 
+% Mill product (Sortie broyeur)
 mill_product = [12 18 24 30 24.01 11.99];
+% Overflow (Produit fini)
+overflow     = [29.92 38.15 31.79 15.90 3.741 0.4899];
 
-% Overflow = sortie fine de l'hydrocyclone
-overflow = [29.92 38.15 31.79 15.90 3.741 0.4899];
-
-%% Normalize into PSD
-PSD_mill = mill_product / sum(mill_product);
+%% 3. Normalize into PSD
+PSD_feed     = fresh_feed / sum(fresh_feed);
+PSD_mill     = mill_product / sum(mill_product);
 PSD_overflow = overflow / sum(overflow);
 
-%% Cumulative passing
-cum_mill = cumsum(PSD_mill);
+%% 4. Cumulative passing
+cum_feed     = cumsum(PSD_feed);
+cum_mill     = cumsum(PSD_mill);
 cum_overflow = cumsum(PSD_overflow);
 
-%% Compute P50 and P80
+%% 5. Compute Metrics (F50, F80, P50, P80)
+% Fresh Feed
+F50 = interp1(cum_feed, size_classes, 0.50, 'linear');
+F80 = interp1(cum_feed, size_classes, 0.80, 'linear');
+% Mill
 P50_mill = interp1(cum_mill, size_classes, 0.50, 'linear');
 P80_mill = interp1(cum_mill, size_classes, 0.80, 'linear');
+% Overflow
+P50_over = interp1(cum_overflow, size_classes, 0.50, 'linear');
+P80_over = interp1(cum_overflow, size_classes, 0.80, 'linear');
 
-P50_overflow = interp1(cum_overflow, size_classes, 0.50, 'linear');
-P80_overflow = interp1(cum_overflow, size_classes, 0.80, 'linear');
+%% 6. Plot cumulative PSD
+figure('Color','w', 'Name', 'Circuit PSD Comparison');
+hold on; grid on;
 
-%% Plot cumulative PSD
-figure('Color','w');
-plot(size_classes, cum_mill, 'ko-', 'LineWidth', 1.8, 'MarkerSize', 8); hold on;
-plot(size_classes, cum_overflow, 'bs-', 'LineWidth', 1.8, 'MarkerSize', 8);
+% Plot curves
+plot(size_classes, cum_feed, 'rd-', 'LineWidth', 1.8, 'MarkerSize', 7, 'DisplayName', 'Fresh Feed (Input)');
+plot(size_classes, cum_mill, 'ko-', 'LineWidth', 1.8, 'MarkerSize', 7, 'DisplayName', 'Mill Product');
+plot(size_classes, cum_overflow, 'bs-', 'LineWidth', 1.8, 'MarkerSize', 7, 'DisplayName', 'Overflow (Output)');
 
 set(gca, 'XScale', 'log');
 xlabel('Particle size (\mum)');
-ylabel('Cumulative passing');
-title('Cumulative PSD - Mill Product vs Overflow');
-grid on;
+ylabel('Cumulative passing (-)');
+title('Circuit Granulometry Comparison');
 ylim([0 1.05]);
 
-% 50% and 80% reference lines
-yline(0.50, '--k', '50%');
-yline(0.80, '--k', '80%');
+% Reference lines
+yline(0.50, '--', 'Color', [0.5 0.5 0.5], 'HandleVisibility', 'off');
+yline(0.80, '--', 'Color', [0.5 0.5 0.5], 'HandleVisibility', 'off');
 
-% Mark P50
-plot(P50_mill, 0.50, 'ko', 'MarkerSize', 8, 'LineWidth', 1.5);
-plot(P50_overflow, 0.50, 'bs', 'MarkerSize', 8, 'LineWidth', 1.5);
+% Vertical markers for P80
+xline(F80, ':r', sprintf('F80=%.0f', F80), 'LabelVerticalAlignment', 'bottom');
+xline(P80_mill, ':k', sprintf('Mill P80=%.0f', P80_mill), 'LabelVerticalAlignment', 'bottom');
+xline(P80_over, ':b', sprintf('Over P80=%.0f', P80_over), 'LabelVerticalAlignment', 'bottom');
 
-% Mark P80
-plot(P80_mill, 0.80, 'ko', 'MarkerSize', 8, 'LineWidth', 1.5);
-plot(P80_overflow, 0.80, 'bs', 'MarkerSize', 8, 'LineWidth', 1.5);
-
-% Vertical lines
-xline(P50_mill, '--k', sprintf('Mill P50 = %.1f \\mum', P50_mill), 'LineWidth', 1.2);
-xline(P80_mill, '--k', sprintf('Mill P80 = %.1f \\mum', P80_mill), 'LineWidth', 1.2);
-
-xline(P50_overflow, '--b', sprintf('Overflow P50 = %.1f \\mum', P50_overflow), 'LineWidth', 1.2);
-xline(P80_overflow, '--b', sprintf('Overflow P80 = %.1f \\mum', P80_overflow), 'LineWidth', 1.2);
-
-legend('Mill Product', 'Overflow', 'Location', 'best');
+legend('Location', 'best');
 hold off;
 
-%% Print values
-fprintf('\n===== Mill Product vs Overflow =====\n');
-fprintf('Mill Product  P50 = %.2f µm\n', P50_mill);
-fprintf('Mill Product  P80 = %.2f µm\n', P80_mill);
-fprintf('Overflow      P50 = %.2f µm\n', P50_overflow);
-fprintf('Overflow      P80 = %.2f µm\n', P80_overflow);
-fprintf('====================================\n\n');
+%% 7. Print Summary Table (FIXED SYNTAX)
+sep_line = repmat('=', 1, 45);
+dash_line = repmat('-', 1, 45);
+
+fprintf('\n%s\n', sep_line);
+fprintf('%-15s | %-10s | %-10s\n', 'Stream', 'P50 (µm)', 'P80 (µm)');
+fprintf('%s\n', dash_line);
+fprintf('%-15s | %-10.2f | %-10.2f\n', 'Fresh Feed', F50, F80);
+fprintf('%-15s | %-10.2f | %-10.2f\n', 'Mill Product', P50_mill, P80_mill);
+fprintf('%-15s | %-10.2f | %-10.2f\n', 'Overflow', P50_over, P80_over);
+fprintf('%s\n\n', sep_line);

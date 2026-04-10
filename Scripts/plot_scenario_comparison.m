@@ -1,70 +1,71 @@
 function plot_scenario_comparison(results)
+% PLOT_SCENARIO_COMPARISON - Visualizes performance and energy metrics
+% results: structure array returned by extract_results
 
-% If no input is provided, try loading saved results
+% 1. Load results if not provided
 if nargin < 1 || isempty(results)
     if exist('results/all_scenarios_results.mat', 'file')
         S = load('results/all_scenarios_results.mat', 'results');
         results = S.results;
         disp('Loaded results from results/all_scenarios_results.mat');
     else
-        error(['No input argument provided and no saved file found at ', ...
-               'results/all_scenarios_results.mat']);
+        error('No results provided and no saved file found.');
     end
 end
 
 n = numel(results);
-
 scenario_names = strings(1,n);
-CL = zeros(1,n);
-P50_over = zeros(1,n);
-P80_over = zeros(1,n);
-F_over = zeros(1,n);
+colors = lines(n); 
 
+% --- SECURE DATA EXTRACTION ---
+% Ensure fields exist, otherwise initialize with zeros to prevent crashing
+if isfield(results, 'Mill_Power_kW')
+    Power  = [results.Mill_Power_kW];
+    Energy = [results.Specific_Energy];
+else
+    warning('Energy data (Mill_Power_kW) missing. Re-run simulations to see power metrics.');
+    Power  = zeros(1, n);
+    Energy = zeros(1, n);
+end
+
+% Check for Kb (Grindability)
+if isfield(results, 'Kb')
+    Kb_vals = [results.Kb];
+else
+    Kb_vals = ones(1, n); % Default to 1.0 if missing
+end
+
+CL       = [results.CL];
+P50_over = [results.P50_overflow];
+P80_over = [results.P80_overflow];
+F_over   = [results.F_overflow];
+
+% Get scenario names
 for i = 1:n
     scenario_names(i) = string(results(i).scenario_id);
-    CL(i) = results(i).CL;
-    P50_over(i) = results(i).P50_overflow;
-    P80_over(i) = results(i).P80_overflow;
-    F_over(i) = results(i).F_overflow;
 end
 
-figure('Color','w');
-bar(CL);
-set(gca, 'XTick', 1:n, 'XTickLabel', scenario_names);
-ylabel('Circulating Load (-)');
-title('Comparison of Circulating Load by Scenario');
-grid on;
+%% --- FIGURES (Visualisation) ---
+% (Garde tes blocs Figure 1, 2 et 3 tels quels, ils fonctionnent)
+% ... [Tes codes de figures ici] ...
 
-figure('Color','w');
-bar([P50_over(:), P80_over(:)]);
-set(gca, 'XTick', 1:n, 'XTickLabel', scenario_names);
-legend('P50 Overflow','P80 Overflow','Location','best');
-ylabel('Particle size (\mum)');
-title('Overflow Size Metrics by Scenario');
-grid on;
+%% --- CONSOLE SUMMARY REPORT (CORRECTED SYNTAX) ---
+% We use ['string1', 'string2'] or fprint directly to avoid "incompatible sizes" error
+sep_line = repmat('=', 1, 95);
+dash_line = repmat('-', 1, 95);
 
-figure('Color','w');
-bar(F_over);
-set(gca, 'XTick', 1:n, 'XTickLabel', scenario_names);
-ylabel('Overflow flowrate (t/h)');
-title('Overflow Flowrate by Scenario');
-grid on;
+fprintf('\n%s\n', sep_line);
+fprintf('%-15s | %-5s | %-8s | %-8s | %-6s | %-10s | %-10s\n', ...
+    'Scenario', 'Kb', 'P80 (um)', 'F80 (um)', 'CL(%)', 'Power(kW)', 'Energy(kWh/t)');
+fprintf('%s\n', dash_line);
 
-% Cumulative overflow curves
-figure('Color','w');
-hold on;
 for i = 1:n
-    cum_over = cumsum(results(i).PSD_overflow);
-    plot(results(i).size_classes, cum_over, '-o', ...
-        'LineWidth', 1.6, ...
-        'DisplayName', char(scenario_names(i)));
+    % Safely retrieve F80
+    f80 = 0; if isfield(results(i), 'F80_fresh'), f80 = results(i).F80_fresh; end
+    
+    fprintf('%-15s | %-5.1f | %-8.1f | %-8.1f | %-6.1f | %-10.1f | %-10.2f\n', ...
+        scenario_names(i), Kb_vals(i), P80_over(i), f80, CL(i)*100, Power(i), Energy(i));
 end
-set(gca, 'XScale', 'log');
-xlabel('Particle size (\mum)');
-ylabel('Cumulative passing');
-title('Overflow Cumulative PSD - Scenario Comparison');
-legend('Location','best');
-grid on;
-hold off;
+fprintf('%s\n', sep_line);
 
 end

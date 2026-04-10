@@ -1,7 +1,5 @@
-function result = extract_results(scenario_id)
-% EXTRACT_RESULTS - Retrieves data from workspace after simulation
-% scenario_id: string identifier for the current scenario
-
+ function result = extract_results(scenario_id)
+% EXTRACT_RESULTS - Retrieves data and calculates energy & reduction performance
     if nargin < 1 || isempty(scenario_id)
         scenario_id = 'manual_run';
     end
@@ -9,11 +7,13 @@ function result = extract_results(scenario_id)
     % 1) Global parameters
     size_classes = evalin('base', 'size_classes');
     F_fresh      = evalin('base', 'F_fresh');
-
+    PSD_fresh    = evalin('base', 'PSD_fresh'); 
+    Kb           = evalin('base', 'Kb');        
+    
     size_classes = double(size_classes(:)');
     num_classes  = numel(size_classes);
 
-    % 2) Signals
+    % 2) Signals Retrieval
     overflow_final  = getLastPoint('overflow_out',  num_classes);
     underflow_final = getLastPoint('underflow_out', num_classes);
     mill_out_final  = getLastPoint('mill_out',      num_classes);
@@ -23,27 +23,50 @@ function result = extract_results(scenario_id)
     underflow_final = double(reshape(underflow_final, 1, []));
     mill_out_final  = double(reshape(mill_out_final,  1, []));
 
-    % 4) Flowrates
+    % 4) Flowrates (t/h)
     F_overflow  = sum(overflow_final);
     F_underflow = sum(underflow_final);
     F_mill      = sum(mill_out_final);
 
-    % 5) PSD
+    % 5) PSD Calculation
     PSD_overflow = overflow_final / max(F_overflow, eps);
     PSD_mill     = mill_out_final / max(F_mill, eps);
 
-    % 6) Cumulative PSD
+    % 6) Cumulative PSD (Passing)
     cum_overflow = cumsum(PSD_overflow);
     cum_mill     = cumsum(PSD_mill);
+    cum_fresh    = cumsum(PSD_fresh);
 
-    % 7) Size metrics
-    result.P50_overflow = interp_metric(size_classes, cum_overflow, 0.50);
-    result.P80_overflow = interp_metric(size_classes, cum_overflow, 0.80);
-    result.P50_mill     = interp_metric(size_classes, cum_mill,     0.50);
+    % 7) Size metrics (microns)
+    % 80% passing (Standard metrics)
     result.P80_mill     = interp_metric(size_classes, cum_mill,     0.80);
+    result.F80_fresh    = interp_metric(size_classes, cum_fresh,    0.80);
+    result.P80_overflow = interp_metric(size_classes, cum_overflow, 0.80);
 
-    % 8) Store outputs
+    % 50% passing (Median size metrics)
+    result.P50_mill     = interp_metric(size_classes, cum_mill,     0.50);
+    result.F50_fresh    = interp_metric(size_classes, cum_fresh,    0.50);
+    result.P50_overflow = interp_metric(size_classes, cum_overflow, 0.50);
+
+    % 8) Reduction Ratios
+    % How much the size has been reduced (Feed size / Product size)
+    result.RR80 = result.F80_fresh / max(result.P80_mill, eps);
+    result.RR50 = result.F50_fresh / max(result.P50_mill, eps);
+
+    % 9) ENERGY CALCULATION (Bond's Law)
+    BWI_eff = 15 / max(Kb, eps); 
+    
+    if result.P80_mill > 0 && result.F80_fresh > result.P80_mill
+        result.Specific_Energy = 10 * BWI_eff * (1/sqrt(result.P80_mill) - 1/sqrt(result.F80_fresh));
+    else
+        result.Specific_Energy = 0;
+    end
+    
+    result.Mill_Power_kW = result.Specific_Energy * F_mill;
+
+    % 10) Store outputs
     result.scenario_id  = scenario_id;
+    result.Kb           = Kb;
     result.F_fresh      = F_fresh;
     result.F_mill       = F_mill;
     result.F_overflow   = F_overflow;
@@ -146,10 +169,15 @@ end
 function D = interp_metric(size_classes, cumulative_curve, target)
     cumulative_curve = double(cumulative_curve(:)');
     size_classes     = double(size_classes(:)');
-
-    if max(cumulative_curve) < target || min(cumulative_curve) > target
+    
+    % FIX: Remove duplicate values in cumulative curve for stable interpolation
+    [cum_unique, idx] = unique(cumulative_curve, 'stable');
+    size_unique = size_classes(idx);
+    
+    if max(cum_unique) < target || min(cum_unique) > target
         D = NaN;
     else
-        D = interp1(cumulative_curve, size_classes, target, 'linear');
+        % Use unique values here
+        D = interp1(cum_unique, size_unique, target, 'linear');
     end
 end
